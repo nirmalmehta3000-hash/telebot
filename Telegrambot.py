@@ -1,15 +1,14 @@
-# Telegrambot.py - Render-ready (pyTelegramBotAPI / telebot)
+# Telegrambot.py - Render-ready (pyTelegramBotAPI / telebot) using CSV storage
 import os
 import logging
 import time
-import traceback
+import csv
 from pathlib import Path
 from datetime import datetime, timezone
 
 import pytz
 import telebot
 from telebot import types
-from openpyxl import Workbook, load_workbook
 
 # --- Logging ---
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -23,50 +22,27 @@ if not TOKEN:
 
 bot = telebot.TeleBot(TOKEN)
 
-# --- Storage setup (local) ---
+# --- Storage setup (CSV) ---
 DATA_DIR = Path("data")
 DATA_DIR.mkdir(parents=True, exist_ok=True)
-FILE_PATH = DATA_DIR / "telegram_user_data_all.xlsx"
+CSV_PATH = DATA_DIR / "telegram_user_data_all.csv"
 
 HEADER = [
     "User ID", "Name", "Username", "Timestamp", "Mobile", "Email",
     "Challenge Response", "Clicked Button", "Gender", "Location", "Language", "Referral Source"
 ]
 
-def _load_or_create_workbook(path: Path):
+def _ensure_csv(path: Path):
     if not path.exists():
-        wb = Workbook()
-        ws = wb.active
-        ws.title = "User Info"
-        ws.append(HEADER)
-        wb.save(path)
-        logger.info(f"Created new workbook at {path}")
-        return wb, ws
-    try:
-        wb = load_workbook(path)
-        if "User Info" not in wb.sheetnames:
-            ws = wb.active
-            ws.title = "User Info"
-            wb.save(path)
-        ws = wb["User Info"]
-        # ensure header columns exist
-        existing_header = [cell.value for cell in ws[1]]
-        for col_name in HEADER:
-            if col_name not in existing_header:
-                ws.cell(row=1, column=len(existing_header) + 1, value=col_name)
-                existing_header.append(col_name)
-        return wb, ws
-    except Exception as e:
-        logger.exception("Error loading workbook — creating a new one.")
-        wb = Workbook()
-        ws = wb.active
-        ws.title = "User Info"
-        ws.append(HEADER)
-        wb.save(path)
-        return wb, ws
+        with path.open("w", newline="", encoding="utf-8") as f:
+            writer = csv.writer(f)
+            writer.writerow(HEADER)
+        logger.info("Created CSV file at %s", path)
 
 def store_interaction_data(message, column_name=None, data=None):
     try:
+        _ensure_csv(CSV_PATH)
+
         user_id = message.chat.id
         first_name = getattr(message.from_user, "first_name", "") or ""
         last_name = getattr(message.from_user, "last_name", "") or ""
@@ -79,28 +55,31 @@ def store_interaction_data(message, column_name=None, data=None):
         ist_now = utc_now.astimezone(ist_timezone)
         timestamp = ist_now.strftime("%Y-%m-%d %H:%M:%S")
 
+        # default values
         mobile = "N/A"
         email = "N/A"
 
-        wb, ws = _load_or_create_workbook(FILE_PATH)
-        # Build a default row
-        new_row_data = [user_id, name, username, timestamp, mobile, email, "N/A", "N/A", "N/A", "N/A", "N/A", "N/A"]
+        # build row
+        row = [user_id, name, username, timestamp, mobile, email, "N/A", "N/A", "N/A", "N/A", "N/A", "N/A"]
 
-        # If a specific column is provided, update the appropriate index
+        # update column if given
         if column_name and data is not None:
             try:
-                col_index = HEADER.index(column_name)
-                new_row_data[col_index] = data
+                idx = HEADER.index(column_name)
+                row[idx] = data
             except ValueError:
-                logger.warning("Column '%s' not found in header.", column_name)
+                logger.warning("Column %s not in header", column_name)
 
-        ws.append(new_row_data)
-        wb.save(FILE_PATH)
+        # append to CSV (atomic enough for single-process Render)
+        with CSV_PATH.open("a", newline="", encoding="utf-8") as f:
+            writer = csv.writer(f)
+            writer.writerow(row)
+
         logger.info("Appended and saved data for user_id=%s", user_id)
     except Exception:
         logger.exception("Failed while storing interaction data")
 
-# --- Bot handlers (single /start handler) ---
+# --- Bot handlers ---
 @bot.message_handler(commands=["start"])
 def start_msg(message):
     store_interaction_data(message)
@@ -228,7 +207,6 @@ def run_bot_forever():
     while True:
         try:
             logger.info("Starting bot polling")
-            # infinity_polling will reconnect automatically on network errors
             bot.infinity_polling(timeout=20, long_polling_timeout=10)
         except Exception:
             logger.exception("Bot crashed, will restart after 5s")
