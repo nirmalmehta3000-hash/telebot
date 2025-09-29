@@ -6,9 +6,7 @@ import datetime
 import mysql.connector
 from mysql.connector import Error
 
-# --- CONFIGURATION ---
-# Load environment variables for security
-# You will set these in the Railway dashboard
+# --- CONFIGURATION (No changes) ---
 TOKEN = os.environ.get("TELEGRAM_TOKEN")
 DB_HOST = os.environ.get("MYSQLHOST")
 DB_USER = os.environ.get("MYSQLUSER")
@@ -31,43 +29,43 @@ def create_db_connection():
             database=DB_NAME,
             port=DB_PORT
         )
-        print("MySQL Database connection successful")
     except Error as e:
         print(f"Error: '{e}'")
     return connection
 
 def setup_database():
-    """Creates the users table if it doesn't exist."""
+    """Creates the new 'interactions' table if it doesn't already exist."""
     conn = create_db_connection()
     if conn is None:
         print("Could not connect to the database. Exiting.")
         return
 
     cursor = conn.cursor()
-    # The table schema for storing user interactions
+    # This command creates a NEW table named 'interactions'. 
+    # It will NOT affect your 'users' table in any way.
     create_table_query = """
-    CREATE TABLE IF NOT EXISTS users (
-        user_id BIGINT PRIMARY KEY,
+    CREATE TABLE IF NOT EXISTS interactions (
+        interaction_id INT AUTO_INCREMENT PRIMARY KEY,
+        user_id BIGINT,
         name VARCHAR(255),
         username VARCHAR(255),
-        first_seen_timestamp DATETIME,
-        last_seen_timestamp DATETIME,
-        challenge_response VARCHAR(255),
-        last_clicked_button VARCHAR(255)
+        timestamp DATETIME,
+        interaction_type VARCHAR(255),
+        interaction_data TEXT
     );
     """
     try:
         cursor.execute(create_table_query)
         conn.commit()
-        print("Table 'users' is ready.")
+        print("Table 'interactions' is ready.")
     except Error as e:
         print(f"Error creating table: {e}")
     finally:
         cursor.close()
         conn.close()
 
-def store_interaction_data(message, interaction_type=None, data=None):
-    """Stores or updates user interaction data in the MySQL database."""
+def store_interaction_data(message, interaction_type, interaction_data):
+    """This function inserts data into the NEW 'interactions' table."""
     user_id = message.chat.id
     first_name = message.from_user.first_name or ""
     last_name = message.from_user.last_name or ""
@@ -78,62 +76,30 @@ def store_interaction_data(message, interaction_type=None, data=None):
     timestamp = datetime.datetime.now(ist_timezone)
 
     conn = create_db_connection()
-    if conn is None:
-        return # Cannot proceed without a DB connection
+    if conn is None: return
 
     cursor = conn.cursor()
 
+    # This query explicitly targets the 'interactions' table for insertion.
+    insert_query = """
+    INSERT INTO interactions (user_id, name, username, timestamp, interaction_type, interaction_data)
+    VALUES (%s, %s, %s, %s, %s, %s)
+    """
     try:
-        # Check if the user already exists
-        cursor.execute("SELECT user_id FROM users WHERE user_id = %s", (user_id,))
-        result = cursor.fetchone()
-
-        if result:
-            # --- UPDATE EXISTING USER ---
-            update_fields = ["last_seen_timestamp = %s"]
-            update_values = [timestamp]
-
-            if interaction_type == "Clicked Button":
-                update_fields.append("last_clicked_button = %s")
-                update_values.append(data)
-            elif interaction_type == "Challenge Response":
-                update_fields.append("challenge_response = %s")
-                update_values.append(data)
-
-            update_values.append(user_id) # For the WHERE clause
-            
-            update_query = f"UPDATE users SET {', '.join(update_fields)} WHERE user_id = %s"
-            cursor.execute(update_query, tuple(update_values))
-            print(f"Updated data for user_id: {user_id}")
-
-        else:
-            # --- INSERT NEW USER ---
-            insert_query = """
-            INSERT INTO users (user_id, name, username, first_seen_timestamp, last_seen_timestamp)
-            VALUES (%s, %s, %s, %s, %s)
-            """
-            cursor.execute(insert_query, (user_id, name, username, timestamp, timestamp))
-            print(f"New user created with user_id: {user_id}")
-            # If there's data to add on the first interaction, we update immediately
-            if interaction_type and data:
-                 store_interaction_data(message, interaction_type, data)
-
-
+        cursor.execute(insert_query, (user_id, name, username, timestamp, interaction_type, interaction_data))
         conn.commit()
-
+        print(f"Logged new interaction for user_id: {user_id} into 'interactions' table.")
     except Error as e:
         print(f"Database error in store_interaction_data: {e}")
     finally:
         cursor.close()
         conn.close()
 
-
-# --- BOT MESSAGE HANDLERS ---
-# Your bot handlers remain mostly the same, just calling the new database function.
+# --- BOT MESSAGE HANDLERS (No changes needed) ---
 
 @bot.message_handler(commands=["start"])
 def start_msg(message):
-    store_interaction_data(message)  # Store initial user data
+    store_interaction_data(message, "Command", "/start")
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=False)
     btn1 = types.KeyboardButton("Consultation & personalized help")
     btn2 = types.KeyboardButton("Job openings/referrals")
@@ -167,13 +133,10 @@ def handle_consultation(message):
     "🔹 Low salary / stuck role", "🔹 Confused about upskilling", "🔹 Other"
 ])
 def handle_challenge_response(message):
-    user_response = message.text
-    store_interaction_data(message, "Challenge Response", user_response)
-
+    store_interaction_data(message, "Challenge Response", message.text)
     markup_topmate = types.InlineKeyboardMarkup()
     btn_topmate = types.InlineKeyboardButton("📞 Book Your 1:1 Consult Call", url="https://topmate.io/gerryson/870539")
     markup_topmate.add(btn_topmate)
-
     bot.send_message(
         message.chat.id,
         f"""Thanks for sharing! 🙌
@@ -186,7 +149,6 @@ He specializes in SQL, Tableau, Power BI, and Snowflake—helping professionals 
 ✨ Use code FIRST1000 to get 90% off your first call! ✨""",
         reply_markup=markup_topmate
     )
-
     followup_markup = types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=False)
     btn1 = types.KeyboardButton("Consultation & personalized help")
     btn2 = types.KeyboardButton("Job openings/referrals")
@@ -244,10 +206,9 @@ def handle_contact_us(message):
         reply_markup=markup
     )
 
-
-# --- MAIN EXECUTION ---
+# --- MAIN EXECUTION (No changes) ---
 if __name__ == "__main__":
     print("Setting up the database...")
-    setup_database()  # Ensure the table exists before the bot starts
+    setup_database()
     print("Starting bot polling...")
     bot.polling()
