@@ -1,4 +1,213 @@
-# Telegrambot.py - Render-ready (pyTelegramBotAPI / telebot) using CSV storage
+# telegram_main.py - Main Telegram bot application
+import os
+import logging
+import time
+from datetime import datetime, timezone
+
+import pytz
+import telebot
+from telebot import types
+
+# Import database utilities
+from db_utils import (
+    store_interaction_data, 
+    log_interaction, 
+    initialize_telegram_database
+)
+
+# --- Logging ---
+logging.basicConfig(
+    level=logging.INFO, 
+    format="%(asctime)s %(levelname)s %(message)s",
+    handlers=[
+        logging.FileHandler('telegram_bot.log'),
+        logging.StreamHandler()
+    ]
+)
+logger = logging.getLogger(__name__)
+
+# --- Token from environment ---
+TOKEN = os.getenv("TELEGRAM_TOKEN")
+if not TOKEN:
+    logger.error("TELEGRAM_TOKEN not set in environment variables. Exiting.")
+    raise SystemExit("Set TELEGRAM_TOKEN in Railway environment variables")
+
+bot = telebot.TeleBot(TOKEN)
+
+# --- Bot handlers ---
+@bot.message_handler(commands=["start"])
+def start_msg(message):
+    store_interaction_data(message)
+    log_interaction(message.chat.id, "/start", "Welcome message sent", "start_command")
+    
+    markup = types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=False)
+    btn1 = types.KeyboardButton("Consultation & personalized help")
+    btn2 = types.KeyboardButton("Job openings/referrals")
+    btn3 = types.KeyboardButton("Get free PDF")
+    btn4 = types.KeyboardButton("End chat")
+    btn5 = types.KeyboardButton("Contact Us")
+    markup.add(btn1, btn2, btn3, btn4, btn5)
+    
+    welcome_message = "Hey user, Gerry's Bot this side 👋\n\nWelcome to our Data Career Support bot.\n\nPlease choose one of the following:"
+    bot.send_message(message.chat.id, welcome_message, reply_markup=markup)
+
+@bot.message_handler(func=lambda message: message.text == "Consultation & personalized help")
+def handle_consultation(message):
+    store_interaction_data(message, "clicked_button", message.text)
+    log_interaction(message.chat.id, message.text, "Challenge selection menu sent", "consultation_request")
+    
+    markup = types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=False)
+    options = [
+        "🔹 Not getting interviews",
+        "🔹 Not getting shortlisted",
+        "🔹 Low salary / stuck role",
+        "🔹 Confused about upskilling",
+        "🔹 Other",
+    ]
+    for option in options:
+        markup.add(option)
+    bot.send_message(
+        message.chat.id,
+        "Before we begin, could you share your biggest challenge right now?\n(Select one)",
+        reply_markup=markup,
+    )
+
+@bot.message_handler(func=lambda message: message.text in [
+    "🔹 Not getting interviews",
+    "🔹 Not getting shortlisted",
+    "🔹 Low salary / stuck role",
+    "🔹 Confused about upskilling",
+    "🔹 Other"
+])
+def handle_challenge_response(message):
+    user_response = message.text
+    store_interaction_data(message, "challenge_response", user_response)
+    log_interaction(message.chat.id, user_response, "Consultation offer sent", "challenge_selection")
+
+    markup_topmate = types.InlineKeyboardMarkup()
+    btn_topmate = types.InlineKeyboardButton("Book Your 1:1 Consult Call", url="https://topmate.io/gerryson/870539")
+    markup_topmate.add(btn_topmate)
+
+    consultation_message = (
+        "Thanks for sharing! 🙌\n\nHere's how we can support you 🚀\n\n"
+        "Gerryson Mehta has 7+ years of experience in data analytics across companies like Coinbase, Mobikwik, and Tech Mahindra.\n"
+        "He specializes in SQL, Tableau, Power BI, and Snowflake—helping professionals transition into higher-paying analytics roles and secure global opportunities.\n\n"
+        "✨ Use code FIRST1000 to get 90% off your first call! ✨"
+    )
+    
+    bot.send_message(message.chat.id, consultation_message, reply_markup=markup_topmate)
+
+    followup_markup = types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=False)
+    btn1 = types.KeyboardButton("Consultation & personalized help")
+    btn2 = types.KeyboardButton("Job openings/referrals")
+    btn3 = types.KeyboardButton("Get free PDF")
+    btn4 = types.KeyboardButton("End chat")
+    btn5 = types.KeyboardButton("Contact Us")
+    followup_markup.add(btn1, btn2, btn3, btn4, btn5)
+    
+    bot.send_message(
+        message.chat.id,
+        "Do you have any other queries you'd like help with?\nFeel free to explore more or end the chat below 👇",
+        reply_markup=followup_markup,
+    )
+    bot.send_message(
+        message.chat.id,
+        "Thanks for connecting! 🙏\nYou can explore more resources at:\n🌐 www.gerrysonmehta.com",
+    )
+
+@bot.message_handler(func=lambda message: message.text == "Job openings/referrals")
+def handle_jobs(message):
+    store_interaction_data(message, "clicked_button", message.text)
+    log_interaction(message.chat.id, message.text, "WhatsApp group link sent", "job_request")
+    
+    markup = types.InlineKeyboardMarkup()
+    btn = types.InlineKeyboardButton("Join WhatsApp Group", url="https://whatsapp.com/channel/0029VamouNm5Ejy6enHyEd29")
+    markup.add(btn)
+    bot.send_message(
+        message.chat.id,
+        "Great! 🎯 Tap below to join our WhatsApp community for curated job openings and referrals.",
+        reply_markup=markup,
+    )
+
+@bot.message_handler(func=lambda message: message.text == "Get free PDF")
+def send_pdf_link(message):
+    store_interaction_data(message, "clicked_button", message.text)
+    log_interaction(message.chat.id, message.text, "PDF download link sent", "pdf_request")
+    
+    markup = types.InlineKeyboardMarkup()
+    btn = types.InlineKeyboardButton("📘 Download Free PDF", url="https://docs.google.com/document/d/e/2PACX-1vTOhSl0g3Q1K_44w5OJFlyBDkOEraufV3sxtojvuQZeIE7S_ptwk0FGjfMi2mohSJ5qgt3-Tw3KbH48/pub")
+    markup.add(btn)
+    bot.send_message(
+        message.chat.id,
+        "Here's your free resource to help you level up in data analytics! 🚀\nTap below to download:",
+        reply_markup=markup,
+    )
+
+@bot.message_handler(func=lambda message: message.text == "End chat")
+def handle_end_chat(message):
+    store_interaction_data(message, "clicked_button", message.text)
+    log_interaction(message.chat.id, message.text, "Chat ended", "end_chat")
+    
+    bot.send_message(
+        message.chat.id,
+        "Chat ended ✅\nFeel free to restart anytime by typing /start.\nWishing you success ahead! 🚀"
+    )
+
+@bot.message_handler(func=lambda message: message.text == "Contact Us")
+def handle_contact_us(message):
+    store_interaction_data(message, "clicked_button", message.text)
+    log_interaction(message.chat.id, message.text, "Contact form link sent", "contact_request")
+    
+    markup = types.InlineKeyboardMarkup()
+    btn = types.InlineKeyboardButton("📬 Contact Us Form", url="https://forms.gle/E3hs5TrJuT7zVGMZ6")
+    markup.add(btn)
+    bot.send_message(
+        message.chat.id,
+        "Tap below to reach out to us:",
+        reply_markup=markup,
+    )
+
+# --- Handle any other text messages ---
+@bot.message_handler(func=lambda message: True, content_types=['text'])
+def handle_unknown_message(message):
+    """Handle any messages that don't match specific handlers"""
+    store_interaction_data(message, "clicked_button", f"Unknown: {message.text}")
+    log_interaction(message.chat.id, message.text, "Unknown command response", "unknown_message")
+    
+    markup = types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=False)
+    btn1 = types.KeyboardButton("Consultation & personalized help")
+    btn2 = types.KeyboardButton("Job openings/referrals")
+    btn3 = types.KeyboardButton("Get free PDF")
+    btn4 = types.KeyboardButton("End chat")
+    btn5 = types.KeyboardButton("Contact Us")
+    markup.add(btn1, btn2, btn3, btn4, btn5)
+    
+    bot.send_message(
+        message.chat.id,
+        "I didn't understand that command. Please choose one of the options below:",
+        reply_markup=markup,
+    )
+
+# --- Keep bot running robustly ---
+def run_bot_forever():
+    """Main function to run the bot with error recovery"""
+    # Initialize database on startup
+    if not initialize_telegram_database():
+        logger.error("Failed to initialize database. Bot may not function properly.")
+    else:
+        logger.info("Database initialized successfully")
+    
+    while True:
+        try:
+            logger.info("Starting Telegram bot polling...")
+            bot.infinity_polling(timeout=20, long_polling_timeout=10)
+        except Exception as e:
+            logger.exception(f"Bot crashed with error: {e}")
+            logger.info("Bot will restart in 5 seconds...")
+            time.sleep(5)
+
+if __name__ == "__main__":
+    run_bot_forever()# Telegrambot.py - Render-ready (pyTelegramBotAPI / telebot) using CSV storage
 import os
 import logging
 import time
