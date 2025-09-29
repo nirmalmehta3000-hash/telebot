@@ -1,4 +1,4 @@
-# telegram_main.py - Main Telegram bot application
+## telegram_main.py - Main Telegram bot application
 import os
 import logging
 import time
