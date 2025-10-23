@@ -95,7 +95,7 @@ def store_interaction_data(message, interaction_type, interaction_data):
         cursor.close()
         conn.close()
 
-# --- BOT MESSAGE HANDLERS (No changes needed) ---
+# --- BOT MESSAGE HANDLERS ---
 
 @bot.message_handler(commands=["start"])
 def start_msg(message):
@@ -104,9 +104,10 @@ def start_msg(message):
     btn1 = types.KeyboardButton("Consultation & personalized help")
     btn2 = types.KeyboardButton("Job openings/referrals")
     btn3 = types.KeyboardButton("Get free PDF")
-    btn4 = types.KeyboardButton("End chat")
+    btn4 = types.KeyboardButton("AI Chatbot")
     btn5 = types.KeyboardButton("Contact Us")
-    markup.add(btn1, btn2, btn3, btn4, btn5)
+    btn6 = types.KeyboardButton("End chat")
+    markup.add(btn1, btn2, btn3, btn4, btn5, btn6)
     bot.send_message(message.chat.id,
         "Hey user, Gerry's Bot this side 👋\n\nWelcome to our Data Career Support bot.\n\nPlease choose one of the following:",
         reply_markup=markup
@@ -134,28 +135,29 @@ def handle_consultation(message):
 ])
 def handle_challenge_response(message):
     store_interaction_data(message, "Challenge Response", message.text)
-    markup_topmate = types.InlineKeyboardMarkup()
-    btn_topmate = types.InlineKeyboardButton("📞 Book Your 1:1 Consult Call", url="https://topmate.io/gerryson/870539")
-    markup_topmate.add(btn_topmate)
+    markup_consult = types.InlineKeyboardMarkup()
+    btn_consult = types.InlineKeyboardButton("📞 Book Your 1:1 Consult Call", url="https://lp.gerrysonmehta.com")
+    markup_consult.add(btn_consult)
     bot.send_message(
         message.chat.id,
         f"""Thanks for sharing! 🙌
 
-Here’s how we can support you 🚀
+Here's how we can support you 🚀
 
 Gerryson Mehta has 7+ years of experience in data analytics across companies like Coinbase, Mobikwik, and Tech Mahindra.
 He specializes in SQL, Tableau, Power BI, and Snowflake—helping professionals transition into higher-paying analytics roles and secure global opportunities.
 
 ✨ Use code FIRST1000 to get 90% off your first call! ✨""",
-        reply_markup=markup_topmate
+        reply_markup=markup_consult
     )
     followup_markup = types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=False)
     btn1 = types.KeyboardButton("Consultation & personalized help")
     btn2 = types.KeyboardButton("Job openings/referrals")
     btn3 = types.KeyboardButton("Get free PDF")
-    btn4 = types.KeyboardButton("End chat")
+    btn4 = types.KeyboardButton("AI Chatbot")
     btn5 = types.KeyboardButton("Contact Us")
-    followup_markup.add(btn1, btn2, btn3, btn4, btn5)
+    btn6 = types.KeyboardButton("End chat")
+    followup_markup.add(btn1, btn2, btn3, btn4, btn5, btn6)
     bot.send_message(
         message.chat.id,
         "Do you have any other queries you'd like help with?\nFeel free to explore more or end the chat below 👇",
@@ -166,11 +168,13 @@ He specializes in SQL, Tableau, Power BI, and Snowflake—helping professionals 
 def handle_jobs(message):
     store_interaction_data(message, "Clicked Button", message.text)
     markup = types.InlineKeyboardMarkup()
-    btn = types.InlineKeyboardButton("🔗 Join WhatsApp Group", url="https://whatsapp.com/channel/0029VamouNm5Ejy6enHyEd29")
-    markup.add(btn)
+    btn_whatsapp = types.InlineKeyboardButton("📱 Join WhatsApp Channel", url="https://whatsapp.com/channel/0029VamouNm5Ejy6enHyEd29")
+    btn_telegram = types.InlineKeyboardButton("✈️ Join Telegram Channel", url="https://t.me/analytixleap")
+    markup.add(btn_whatsapp)
+    markup.add(btn_telegram)
     bot.send_message(
         message.chat.id,
-        "Great! 🎯 Tap below to join our WhatsApp community for curated job openings and referrals.",
+        "Great! 🎯 Join our communities for curated job openings and referrals.\n\nChoose your preferred platform:",
         reply_markup=markup
     )
 
@@ -182,16 +186,20 @@ def send_pdf_link(message):
     markup.add(btn)
     bot.send_message(
         message.chat.id,
-        "Here’s your free resource to help you level up in data analytics! 🚀\nTap below to download:",
+        "Here's your free resource to help you level up in data analytics! 🚀\nTap below to download:",
         reply_markup=markup
     )
 
-@bot.message_handler(func=lambda message: message.text == "End chat")
-def handle_end_chat(message):
+@bot.message_handler(func=lambda message: message.text == "AI Chatbot")
+def handle_ai_chatbot(message):
     store_interaction_data(message, "Clicked Button", message.text)
+    markup = types.InlineKeyboardMarkup()
+    btn = types.InlineKeyboardButton("🤖 Open AI Chatbot", url="https://bot.gerrysonmehta.com/")
+    markup.add(btn)
     bot.send_message(
         message.chat.id,
-        "Chat ended ✅\nFeel free to restart anytime by typing /start.\nWishing you success ahead! 🚀"
+        "Chat with our AI-powered assistant! 🤖\nTap below to get started:",
+        reply_markup=markup
     )
 
 @bot.message_handler(func=lambda message: message.text == "Contact Us")
@@ -204,6 +212,14 @@ def handle_contact_us(message):
         message.chat.id,
         "Tap below to reach out to us:",
         reply_markup=markup
+    )
+
+@bot.message_handler(func=lambda message: message.text == "End chat")
+def handle_end_chat(message):
+    store_interaction_data(message, "Clicked Button", message.text)
+    bot.send_message(
+        message.chat.id,
+        "Chat ended ✅\nFeel free to restart anytime by typing /start.\nWishing you success ahead! 🚀"
     )
 
 # --- MAIN EXECUTION (No changes) ---
