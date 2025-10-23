@@ -222,9 +222,24 @@ def handle_end_chat(message):
         "Chat ended ✅\nFeel free to restart anytime by typing /start.\nWishing you success ahead! 🚀"
     )
 
-# --- MAIN EXECUTION (No changes) ---
+# --- MAIN EXECUTION ---
 if __name__ == "__main__":
     print("Setting up the database...")
     setup_database()
+    
+    # Remove any existing webhook
+    bot.remove_webhook()
+    print("Webhook removed (if any)")
+    
     print("Starting bot polling...")
-    bot.polling()
+    try:
+        bot.polling(none_stop=True, interval=0, timeout=20)
+    except KeyboardInterrupt:
+        print("\nBot stopped by user")
+        bot.stop_polling()
+    except Exception as e:
+        print(f"Polling error: {e}")
+        bot.stop_polling()
+        import time
+        time.sleep(5)
+        print("Attempting to restart...")
